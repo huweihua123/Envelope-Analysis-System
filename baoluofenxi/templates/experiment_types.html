@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}试验类型管理 - 包络分析系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-flask me-2"></i>试验类型管理</h2>
+            <a href="{{ url_for('create_experiment_type') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>创建新类型
+            </a>
+        </div>
+        
+        {% if types %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>名称</th>
+                        <th>描述</th>
+                        <th>时间列</th>
+                        <th>数据列</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for type in types %}
+                    <tr>
+                        <td>{{ type.id }}</td>
+                        <td><strong>{{ type.name }}</strong></td>
+                        <td>{{ type.description or '无描述' }}</td>
+                        <td><code class="bg-light px-2 py-1 rounded">{{ type.time_column }}</code></td>
+                        <td>
+                            {% for col in type.data_columns %}
+                                <span class="badge bg-secondary me-1">{{ col }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ type.created_at.strftime('%Y-%m-%d %H:%M') if type.created_at else '未知' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('upload_page', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-success" title="上传数据">
+                                    <i class="fas fa-upload"></i>
+                                </a>
+                                <a href="{{ url_for('envelope_analysis', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-warning" title="包络分析">
+                                    <i class="fas fa-chart-area"></i>
+                                </a>
+                                <a href="{{ url_for('data_management', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-info" title="数据管理">
+                                    <i class="fas fa-database"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-danger" 
+                                        onclick="deleteExperimentType({{ type.id }}, '{{ type.name }}')" 
+                                        title="删除">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-flask fa-4x text-muted mb-3"></i>
+            <h4 class="text-muted">暂无试验类型</h4>
+            <p class="text-muted">点击上方按钮创建第一个试验类型</p>
+            <a href="{{ url_for('create_experiment_type') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>创建试验类型
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除试验类型 "<span id="deleteTypeName"></span>" 吗？</p>
+                <p class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>此操作不可撤销！</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">确定删除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function deleteExperimentType(typeId, typeName) {
+    document.getElementById('deleteTypeName').textContent = typeName;
+    document.getElementById('deleteForm').action = `/experiment-types/${typeId}/delete`;
+    
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    modal.show();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block title %}创建试验类型{% endblock %}
+
+{% block extra_head %}
+<style>
+.form-container {
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.form-section {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.column-input-group {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.column-input {
+    flex: 1;
+    margin-right: 10px;
+}
+
+.btn-remove-column {
+    width: 40px;
+    height: 38px;
+}
+
+.sample-data {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+}
+
+.file-upload-area {
+    border: 2px dashed #dee2e6;
+    border-radius: 8px;
+    padding: 30px;
+    text-align: center;
+    background-color: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.file-upload-area:hover {
+    border-color: #007bff;
+    background-color: #e3f2fd;
+}
+
+.file-upload-area.dragover {
+    border-color: #28a745;
+    background-color: #d4edda;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="form-container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2><i class="fas fa-plus-circle me-2"></i>创建试验类型</h2>
+            <a href="{{ url_for('experiment_types') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>返回列表
+            </a>
+        </div>
+
+        <form id="createTypeForm" action="{{ url_for('create_experiment_type') }}" method="post" enctype="multipart/form-data">
+            <!-- 基本信息 -->
+            <div class="form-section">
+                <h5><i class="fas fa-info-circle me-2"></i>基本信息</h5>
+                <hr>
+                
+                <div class="mb-3">
+                    <label for="name" class="form-label">试验类型名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="name" name="name" required 
+                           placeholder="例如：温度测试、压力测试等">
+                    <div class="form-text">建议使用简洁明了的名称</div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">描述</label>
+                    <textarea class="form-control" id="description" name="description" rows="3" 
+                              placeholder="详细描述此试验类型的用途和特点..."></textarea>
+                </div>
+            </div>
+
+            <!-- 数据格式配置 -->
+            <div class="form-section">
+                <h5><i class="fas fa-table me-2"></i>数据格式配置</h5>
+                <hr>
+                
+                <div class="mb-3">
+                    <label for="time_column" class="form-label">时间列名称 <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="time_column" name="time_column" 
+                           value="t" required placeholder="t">
+                    <div class="form-text">CSV文件中表示时间的列名</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">数据列配置 <span class="text-danger">*</span></label>
+                    <div id="columnContainer">
+                        <div class="column-input-group">
+                            <input type="text" class="form-control column-input" name="data_columns[]" 
+                                   placeholder="C1" required>
+                            <button type="button" class="btn btn-outline-danger btn-remove-column" 
+                                    onclick="removeColumn(this)" disabled>
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addColumn()">
+                        <i class="fas fa-plus me-1"></i>添加列
+                    </button>
+                    <div class="form-text">定义CSV文件中的数据列名称，如 C1, C2, C3 或 P1, P2, P3</div>
+                </div>
+            </div>
+
+            <!-- 样本文件上传（可选） -->
+            <div class="form-section">
+                <h5><i class="fas fa-file-upload me-2"></i>样本文件（可选）</h5>
+                <hr>
+                
+                <div class="file-upload-area" onclick="document.getElementById('sampleFile').click()">
+                    <input type="file" id="sampleFile" name="sample_file" class="d-none" 
+                           accept=".csv,.xlsx,.xls" onchange="handleSampleFile(this)">
+                    <div id="uploadText">
+                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i><br>
+                        <h6>点击选择样本文件或拖拽到此处</h6>
+                        <p class="text-muted mb-0">支持 CSV, Excel 文件 (可选，用于自动识别列结构)</p>
+                    </div>
+                </div>
+                
+                <div id="samplePreview" class="mt-3 d-none">
+                    <h6>文件预览：</h6>
+                    <div class="sample-data" id="sampleData"></div>
+                </div>
+            </div>
+
+            <!-- 提交按钮 -->
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save me-2"></i>创建试验类型
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 加载指示器 -->
+<div id="loadingModal" class="modal fade" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body text-center p-4">
+                <div class="spinner-border text-primary mb-3" role="status">
+                    <span class="visually-hidden">创建中...</span>
+                </div>
+                <h6>正在创建试验类型...</h6>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// 添加数据列
+function addColumn() {
+    const container = document.getElementById('columnContainer');
+    const newGroup = document.createElement('div');
+    newGroup.className = 'column-input-group';
+    
+    const columnCount = container.children.length + 1;
+    const columnName = columnCount <= 26 ? `C${columnCount}` : `C${columnCount}`;
+    
+    newGroup.innerHTML = `
+        <input type="text" class="form-control column-input" name="data_columns[]" 
+               placeholder="${columnName}" required>
+        <button type="button" class="btn btn-outline-danger btn-remove-column" 
+                onclick="removeColumn(this)">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    container.appendChild(newGroup);
+    updateRemoveButtons();
+}
+
+// 移除数据列
+function removeColumn(button) {
+    const container = document.getElementById('columnContainer');
+    if (container.children.length > 1) {
+        button.closest('.column-input-group').remove();
+        updateRemoveButtons();
+    }
+}
+
+// 更新移除按钮状态
+function updateRemoveButtons() {
+    const container = document.getElementById('columnContainer');
+    const removeButtons = container.querySelectorAll('.btn-remove-column');
+    
+    removeButtons.forEach((btn, index) => {
+        btn.disabled = container.children.length === 1;
+    });
+}
+
+// 处理样本文件
+function handleSampleFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    const uploadText = document.getElementById('uploadText');
+    const samplePreview = document.getElementById('samplePreview');
+    
+    uploadText.innerHTML = `
+        <i class="fas fa-file-alt fa-2x text-success mb-2"></i><br>
+        <h6>${file.name}</h6>
+        <p class="text-muted mb-0">大小: ${formatFileSize(file.size)}</p>
+    `;
+    
+    // 如果是CSV文件，尝试读取前几行
+    if (file.name.toLowerCase().endsWith('.csv')) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const text = e.target.result;
+            const lines = text.split('\n').slice(0, 5); // 取前5行
+            
+            document.getElementById('sampleData').textContent = lines.join('\n');
+            samplePreview.classList.remove('d-none');
+            
+            // 尝试自动识别列名
+            if (lines.length > 0) {
+                const headers = lines[0].split(',');
+                autoFillColumns(headers);
+            }
+        };
+        reader.readAsText(file);
+    } else {
+        samplePreview.classList.add('d-none');
+    }
+}
+
+// 自动填充列名
+function autoFillColumns(headers) {
+    const container = document.getElementById('columnContainer');
+    
+    // 清空现有列
+    container.innerHTML = '';
+    
+    // 过滤掉时间列
+    const timeColumn = document.getElementById('time_column').value || 't';
+    const dataHeaders = headers.filter(h => h.trim().toLowerCase() !== timeColumn.toLowerCase());
+    
+    // 添加数据列
+    dataHeaders.forEach((header, index) => {
+        const group = document.createElement('div');
+        group.className = 'column-input-group';
+        group.innerHTML = `
+            <input type="text" class="form-control column-input" name="data_columns[]" 
+                   value="${header.trim()}" required>
+            <button type="button" class="btn btn-outline-danger btn-remove-column" 
+                    onclick="removeColumn(this)" ${index === 0 && dataHeaders.length === 1 ? 'disabled' : ''}>
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(group);
+    });
+    
+    if (dataHeaders.length === 0) {
+        // 如果没有识别到数据列，添加默认的C1
+        addColumn();
+    }
+    
+    updateRemoveButtons();
+}
+
+// 格式化文件大小
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// 表单提交
+document.getElementById('createTypeForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    // 验证数据列
+    const columnInputs = document.querySelectorAll('input[name="data_columns[]"]');
+    const columns = Array.from(columnInputs).map(input => input.value.trim());
+    
+    if (columns.some(col => !col)) {
+        alert('请填写所有数据列名称');
+        return;
+    }
+    
+    // 检查重复
+    const uniqueColumns = [...new Set(columns)];
+    if (uniqueColumns.length !== columns.length) {
+        alert('数据列名称不能重复');
+        return;
+    }
+    
+    // 显示加载指示器
+    const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+    loadingModal.show();
+    
+    // 提交表单
+    const formData = new FormData(this);
+    
+    fetch(this.action, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        loadingModal.hide();
+        if (data.success) {
+            alert('试验类型创建成功！');
+            window.location.href = '/experiment-types';
+        } else {
+            alert('创建失败: ' + (data.message || '未知错误'));
+        }
+    })
+    .catch(error => {
+        loadingModal.hide();
+        console.error('Error:', error);
+        alert('网络错误，请重试');
+    });
+});
+
+// 拖拽上传
+const uploadArea = document.querySelector('.file-upload-area');
+
+uploadArea.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        document.getElementById('sampleFile').files = files;
+        handleSampleFile(document.getElementById('sampleFile'));
+    }
+});
+</script>
+{% endblock %}

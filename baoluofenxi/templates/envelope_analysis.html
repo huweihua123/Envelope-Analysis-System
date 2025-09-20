@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}包络分析 - {{ experiment_type.name }}{% endblock %}
+
+{% block extra_head %}
+<style>
+.chart-container {
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: white;
+}
+
+.control-panel {
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.column-selector {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.historical-data-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.data-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 8px;
+    background-color: white;
+}
+
+.data-item:hover {
+    background-color: #f5f5f5;
+}
+
+.upload-area {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    background-color: #fafafa;
+    transition: all 0.3s;
+}
+
+.upload-area:hover {
+    border-color: #007bff;
+    background-color: #f0f8ff;
+}
+
+.upload-area.dragover {
+    border-color: #28a745;
+    background-color: #f0fff0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row" data-experiment-type-id="{{ experiment_type.id }}">
+    <!-- 左侧控制面板 -->
+    <div class="col-lg-3">
+        <div class="control-panel mb-4">
+            <h5><i class="fas fa-cogs me-2"></i>控制面板</h5>
+            <hr>
+            
+            <!-- 列选择器 -->
+            <div class="mb-4">
+                <h6><i class="fas fa-columns me-2"></i>选择显示列</h6>
+                <div class="column-selector">
+                    {% for column in data_columns %}
+                    <div class="form-check">
+                        <input class="form-check-input column-checkbox" type="checkbox" 
+                               id="col_{{ column }}" value="{{ column }}"
+                               {{ 'checked' if column in selected_columns else '' }}>
+                        <label class="form-check-label" for="col_{{ column }}">
+                            {{ column }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- 历史数据管理 -->
+            <div class="mb-4">
+                <h6><i class="fas fa-database me-2"></i>历史数据集</h6>
+                <div class="historical-data-list">
+                    {% for data in experiment_data %}
+                    <div class="data-item">
+                        <div class="form-check">
+                            <input class="form-check-input historical-data-toggle" type="checkbox" 
+                                   id="data_{{ data.id }}" value="{{ data.id }}"
+                                   data-data-id="{{ data.id }}"
+                                   {{ 'checked' if data.is_historical else '' }}>
+                            <label class="form-check-label" for="data_{{ data.id }}">
+                                <strong>{{ data.data_name }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    {{ data.upload_time.strftime('%Y-%m-%d %H:%M') }}
+                                    <br>{{ data.row_count }} 行数据
+                                </small>
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    
+                    {% if not experiment_data %}
+                    <div class="text-center text-muted">
+                        <i class="fas fa-inbox fa-2x mb-2"></i>
+                        <p>暂无数据</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- 快捷操作 -->
+            <div class="mb-4">
+                <h6><i class="fas fa-tools me-2"></i>快捷操作</h6>
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="exportChart()">
+                        <i class="fas fa-download me-1"></i>导出图表
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleFullscreen()">
+                        <i class="fas fa-expand me-1"></i>全屏显示
+                    </button>
+                    <a href="{{ url_for('upload_page', experiment_type_id=experiment_type.id) }}" 
+                       class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-plus me-1"></i>上传新数据
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 新数据上传区域 -->
+        <div class="control-panel">
+            <h6><i class="fas fa-cloud-upload-alt me-2"></i>快速上传</h6>
+            <form id="quickUploadForm" action="{{ url_for('upload_data', experiment_type_id=experiment_type.id) }}" 
+                  method="post" enctype="multipart/form-data">
+                <div class="upload-area mb-3">
+                    <div class="upload-text">
+                        <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i><br>
+                        <small>拖拽文件到此处或点击选择</small>
+                    </div>
+                </div>
+                
+                <input type="file" id="quickFileInput" name="file" class="d-none" 
+                       accept=".csv,.xlsx,.xls">
+                
+                <div class="mb-3">
+                    <input type="text" class="form-control form-control-sm" 
+                           id="quickDataName" name="data_name" 
+                           placeholder="输入数据名称..." required>
+                </div>
+                
+                <button type="submit" class="btn btn-success btn-sm w-100" id="quickUploadBtn" disabled>
+                    <i class="fas fa-upload me-1"></i>立即上传
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- 右侧图表区域 -->
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>{{ experiment_type.name }} - 包络分析图
+                </h5>
+                <div class="btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="updateEnvelopeChart()">
+                        <i class="fas fa-refresh me-1"></i>刷新
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="exportChart()">
+                        <i class="fas fa-camera me-1"></i>截图
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <!-- ECharts 图表容器 -->
+                <div id="envelopeChart" class="chart-container"></div>
+            </div>
+        </div>
+        
+        <!-- 统计信息 -->
+        <div class="row mt-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-primary">{{ experiment_data|length }}</h5>
+                        <p class="card-text">总数据数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">{{ historical_data_count }}</h5>
+                        <p class="card-text">历史数据数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">{{ selected_columns|length }}</h5>
+                        <p class="card-text">选中列数</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-warning">{{ data_columns|length }}</h5>
+                        <p class="card-text">总列数</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 加载指示器 -->
+<div id="loading-spinner" class="position-fixed top-0 start-0 w-100 h-100 d-none" 
+     style="background-color: rgba(0,0,0,0.5); z-index: 9999;">
+    <div class="d-flex justify-content-center align-items-center h-100">
+        <div class="text-center text-white">
+            <div class="spinner-border mb-3" role="status">
+                <span class="visually-hidden">加载中...</span>
+            </div>
+            <div id="spinner-message">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- jQuery -->
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
+<!-- 自定义JavaScript -->
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+<script>
+$(document).ready(function() {
+    // 快速上传功能
+    const quickUploadArea = $('.upload-area');
+    const quickFileInput = $('#quickFileInput');
+    
+    quickUploadArea.on('click', function() {
+        quickFileInput.click();
+    });
+    
+    quickUploadArea.on('dragover', function(e) {
+        e.preventDefault();
+        $(this).addClass('dragover');
+    });
+    
+    quickUploadArea.on('dragleave', function(e) {
+        e.preventDefault();
+        $(this).removeClass('dragover');
+    });
+    
+    quickUploadArea.on('drop', function(e) {
+        e.preventDefault();
+        $(this).removeClass('dragover');
+        const files = e.originalEvent.dataTransfer.files;
+        if (files.length > 0) {
+            quickFileInput[0].files = files;
+            handleQuickFileSelection();
+        }
+    });
+    
+    quickFileInput.on('change', handleQuickFileSelection);
+    
+    function handleQuickFileSelection() {
+        const files = quickFileInput[0].files;
+        if (files.length > 0) {
+            const file = files[0];
+            $('.upload-text').html(
+                `<i class="fas fa-file-alt fa-2x text-success mb-2"></i><br>
+                 <strong>${file.name}</strong><br>
+                 <small class="text-muted">${formatFileSize(file.size)}</small>`
+            );
+            $('#quickUploadBtn').prop('disabled', false);
+        }
+    }
+    
+    // 表单提交处理
+    $('#quickUploadForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        if (!quickFileInput[0].files.length || !$('#quickDataName').val().trim()) {
+            showAlert('请选择文件并输入数据名称', 'warning');
+            return;
+        }
+        
+        showLoadingSpinner('正在上传文件...');
+        
+        $.ajax({
+            url: $(this).attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                hideLoadingSpinner();
+                if (response.success) {
+                    showAlert('文件上传成功！', 'success');
+                    // 重置表单
+                    quickFileInput.val('');
+                    $('#quickDataName').val('');
+                    $('.upload-text').html(
+                        `<i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i><br>
+                         <small>拖拽文件到此处或点击选择</small>`
+                    );
+                    $('#quickUploadBtn').prop('disabled', true);
+                    
+                    // 刷新页面数据
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else {
+                    showAlert(response.message || '上传失败', 'error');
+                }
+            },
+            error: function() {
+                hideLoadingSpinner();
+                showAlert('网络错误，请重试', 'error');
+            }
+        });
+    });
+    
+    // 初始化时更新图表
+    setTimeout(() => {
+        updateEnvelopeChart();
+    }, 500);
+});
+
+function showLoadingSpinner(message) {
+    $('#loading-spinner').removeClass('d-none').addClass('d-flex');
+    $('#spinner-message').text(message || '加载中...');
+}
+
+function hideLoadingSpinner() {
+    $('#loading-spinner').removeClass('d-flex').addClass('d-none');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block title %}首页 - 包络分析系统{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="jumbotron bg-primary text-white p-5 rounded mb-4">
+            <h1 class="display-4">包络分析系统</h1>
+            <p class="lead">专业的试验数据包络分析工具，支持多种试验类型的数据处理和包络计算。</p>
+            <hr class="my-4">
+            <p>开始使用前，请先创建试验类型，然后上传数据进行分析。</p>
+            <a class="btn btn-light btn-lg" href="{{ url_for('experiment_types') }}" role="button">
+                <i class="fas fa-cog me-2"></i>管理试验类型
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-flask fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">试验类型管理</h5>
+                <p class="card-text">创建和管理不同的试验类型，定义数据格式和列结构。</p>
+                <a href="{{ url_for('experiment_types') }}" class="btn btn-primary">进入管理</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-upload fa-3x text-success mb-3"></i>
+                <h5 class="card-title">数据上传</h5>
+                <p class="card-text">上传CSV或Excel文件，系统会自动验证和处理数据。</p>
+                {% if experiment_types %}
+                <div class="dropdown">
+                    <button class="btn btn-success dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        选择类型上传
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% for type in experiment_types %}
+                        <li><a class="dropdown-item" href="{{ url_for('upload_page', experiment_type_id=type.id) }}">{{ type.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <button class="btn btn-secondary" disabled>请先创建试验类型</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-area fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">包络分析</h5>
+                <p class="card-text">基于历史数据计算包络边界，分析新数据的合规性。</p>
+                {% if experiment_types %}
+                <div class="dropdown">
+                    <button class="btn btn-warning dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        选择类型分析
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% for type in experiment_types %}
+                        <li><a class="dropdown-item" href="{{ url_for('envelope_analysis', experiment_type_id=type.id) }}">{{ type.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <button class="btn btn-secondary" disabled>请先创建试验类型</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-lg-3 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="fas fa-database fa-3x text-info mb-3"></i>
+                <h5 class="card-title">数据管理</h5>
+                <p class="card-text">查看和管理已上传的试验数据，设置历史数据集。</p>
+                {% if experiment_types %}
+                <div class="dropdown">
+                    <button class="btn btn-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        选择类型管理
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% for type in experiment_types %}
+                        <li><a class="dropdown-item" href="{{ url_for('data_management', experiment_type_id=type.id) }}">{{ type.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% else %}
+                <button class="btn btn-secondary" disabled>请先创建试验类型</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 试验类型统计 -->
+{% if experiment_types %}
+<div class="row mt-5">
+    <div class="col-12">
+        <h3>试验类型概览</h3>
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>试验类型</th>
+                        <th>描述</th>
+                        <th>时间列</th>
+                        <th>数据列</th>
+                        <th>创建时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for type in experiment_types %}
+                    <tr>
+                        <td><strong>{{ type.name }}</strong></td>
+                        <td>{{ type.description or '无描述' }}</td>
+                        <td><code>{{ type.time_column }}</code></td>
+                        <td>
+                            {% for col in type.data_columns %}
+                                <span class="badge bg-secondary me-1">{{ col }}</span>
+                            {% endfor %}
+                        </td>
+                        <td>{{ type.created_at.strftime('%Y-%m-%d %H:%M') if type.created_at else '未知' }}</td>
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('upload_page', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-success" title="上传数据">
+                                    <i class="fas fa-upload"></i>
+                                </a>
+                                <a href="{{ url_for('envelope_analysis', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-warning" title="包络分析">
+                                    <i class="fas fa-chart-area"></i>
+                                </a>
+                                <a href="{{ url_for('data_management', experiment_type_id=type.id) }}" 
+                                   class="btn btn-outline-info" title="数据管理">
+                                    <i class="fas fa-database"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+<style>
+.jumbotron {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.card {
+    transition: transform 0.2s;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}

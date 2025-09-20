@@ -1,0 +1,26 @@
+# Envelope Analysis System Dependencies
+# Flask Framework
+Flask==2.3.3
+Flask-SQLAlchemy==3.0.5
+Flask-Migrate==4.0.5
+Flask-CORS==4.0.0
+
+# Database Connections
+PyMySQL==1.1.0
+clickhouse-driver==0.2.7
+clickhouse-connect==0.6.17
+
+# Data Processing
+pandas
+numpy
+openpyxl
+xlrd
+
+# Scientific Computing (optional)
+scipy
+
+# Configuration Management
+python-dotenv
+
+# Development Tools
+loguru
