@@ -449,9 +449,11 @@ def register_api_routes(app):
                 jsonify({"success": False, "message": f"获取包络数据失败: {str(e)}"}),
                 500,
             )
-            return jsonify({"success": False, "message": str(e)}), 500
+            return (
+                jsonify({"success": False, "message": str(e)}),
+                500,
+            )  # 包络分析相关接口
 
-    # 包络分析相关接口
     @app.route("/api/envelope/<int:experiment_type_id>/temp-upload", methods=["POST"])
     def upload_temp_comparison_data(experiment_type_id):
         """上传临时对比数据到ClickHouse"""
@@ -465,8 +467,19 @@ def register_api_routes(app):
             if file.filename == "":
                 return jsonify({"success": False, "message": "没有选择文件"}), 400
 
+            # 获取格式参数（从表单字段中获取）
+            format_options = None
+            if "format_type" in request.form:
+                format_options = {
+                    "format_type": request.form.get("format_type", "standard"),
+                    "separator": request.form.get("separator", " "),
+                    "skip_rows": int(request.form.get("skip_rows", 0)),
+                }
+
             processor = DataProcessor()
-            result = processor.process_temp_upload(file, experiment_type)
+            result = processor.process_temp_upload(
+                file, experiment_type, format_options
+            )
 
             if result["success"]:
                 return jsonify(

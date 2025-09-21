@@ -148,75 +148,19 @@
                 将CSV文件拖到此处，或<em>点击选择文件</em>
               </div>
             </el-upload>
-            
-            <!-- 文件格式检测结果 -->
-            <div v-if="showFormatDetection && formatDetectionResult" style="margin-top: 15px;">
-              <el-card shadow="never" style="border: 1px dashed #f56c6c;">
-                <template #header>
-                  <span style="color: #f56c6c; font-size: 14px;">
-                    <el-icon><Warning /></el-icon>
-                    检测到特殊格式文件
-                  </span>
-                </template>
-                <div>
-                  <el-alert
-                    title="文件格式说明"
-                    type="warning"
-                    :closable="false"
-                    style="margin-bottom: 15px;"
-                  >
-                    <template #default>
-                      <p>系统检测到您的CSV文件所有数据都在一列中，需要进行格式转换</p>
-                      <p><strong>检测到的数据格式：</strong></p>
-                      <div style="font-family: monospace; background: #f5f5f5; padding: 8px; margin: 8px 0; border-radius: 4px;">
-                        <div v-for="(line, index) in formatDetectionResult.previewLines" :key="index">
-                          {{ line }}
-                        </div>
-                      </div>
-                    </template>
-                  </el-alert>
-                  
-                  <el-form label-width="120px" size="small">
-                    <el-form-item label="分隔符类型:">
-                      <el-radio-group v-model="separatorConfig.separator">
-                        <el-radio value=" ">单空格</el-radio>
-                        <el-radio value="  ">多空格</el-radio>
-                        <el-radio value="\t">制表符</el-radio>
-                      </el-radio-group>
-                    </el-form-item>
-                    <el-form-item label="跳过行数:">
-                      <el-input-number 
-                        v-model="separatorConfig.skipRows" 
-                        :min="0" 
-                        :max="5" 
-                        size="small"
-                        style="width: 120px"
-                      />
-                      <el-text type="info" size="small" style="margin-left: 10px;">
-                        从文件开头跳过的行数
-                      </el-text>
-                    </el-form-item>
-                  </el-form>
-                  
-                  <div style="margin-top: 10px;">
-                    <el-button type="primary" size="small" @click="confirmFormatAndUpload">
-                      确认格式并上传
-                    </el-button>
-                    <el-button size="small" @click="showFormatDetection = false">
-                      取消（按标准格式处理）
-                    </el-button>
-                  </div>
-                </div>
-              </el-card>
-            </div>
+              <!-- 文件格式检测结果 - 已简化，自动处理 -->
               
-            <div v-if="comparisonFile && !showFormatDetection" style="margin-top: 15px;">
+            <div v-if="comparisonFile" style="margin-top: 15px;">
               <el-tag size="large" closable @close="removeComparisonFile">
                 <el-icon><Document /></el-icon>
                 {{ comparisonFile.name }}
+                <span v-if="fileFormatType === 'special'" style="margin-left: 8px;">
+                  <el-tag type="warning" size="small">特殊格式</el-tag>
+                </span>
               </el-tag>
               <div style="margin-top: 10px;">
                 <el-button 
+                  v-if="fileFormatType === 'standard'"
                   type="primary" 
                   @click="loadComparisonData" 
                   :loading="loadingComparison"
@@ -353,31 +297,33 @@
                 <el-select v-model="chartType" @change="updateChart" style="width: 120px;">
                   <el-option label="折线图" value="line" />
                   <el-option label="散点图" value="scatter" />
-                </el-select>
-                <el-button type="warning" @click="exportChart" :disabled="!chartInstance">
+                </el-select>                <el-button type="warning" @click="exportChart" :disabled="!chartInstance">
                   <el-icon><Download /></el-icon>
                   导出图表
+                </el-button>
+                <el-button type="success" @click="exportExcel" :disabled="!envelopeData">
+                  <el-icon><Document /></el-icon>
+                  导出Excel数据
                 </el-button>
               </el-space>
             </div>
           </template>
-          
-          <!-- 数据统计信息 -->
+            <!-- 数据统计信息 -->
           <el-row v-if="envelopeData" :gutter="16" style="margin-bottom: 16px;">
             <el-col :span="6">
               <el-statistic title="历史数据集数量" :value="envelopeData.data_count || 0" />
             </el-col>
             <el-col :span="6">
-              <el-statistic title="包络数据点数" :value="envelopeData.sampling_points || 0" />
+              <el-statistic title="包络数据点数" :value="(envelopeData as any).sampling_points || 0" />
             </el-col>
             <el-col :span="6">
-              <el-statistic title="原始数据点数" :value="envelopeData.original_points || 0" />
+              <el-statistic title="原始数据点数" :value="(envelopeData as any).original_points || 0" />
             </el-col>
             <el-col :span="6">
               <el-statistic title="处理模式">
                 <template #default>
-                  <el-tag :type="envelopeData.sampling_method === 'full_data' ? 'success' : 'primary'">
-                    {{ envelopeData.sampling_method === 'full_data' ? '完整数据' : '采样处理' }}
+                  <el-tag :type="(envelopeData as any).sampling_method === 'full_data' ? 'success' : 'primary'">
+                    {{ (envelopeData as any).sampling_method === 'full_data' ? '完整数据' : '采样处理' }}
                   </el-tag>
                 </template>
               </el-statistic>
@@ -409,10 +355,10 @@ import {
   TrendCharts, 
   Download, 
   UploadFilled, 
-  Document,
-  Warning
+  Document
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
+import * as XLSX from 'xlsx'
 import { envelopeApi } from '../api/envelope'
 import type { ExperimentType, EnvelopeData, TempComparisonData, EnvelopeComparisonResult } from '../types'
 
@@ -443,12 +389,6 @@ const comparisonSamplingPoints = ref(200)
 
 // 特殊格式处理相关状态
 const fileFormatType = ref<'standard' | 'special'>('standard')
-const showFormatDetection = ref(false)
-const formatDetectionResult = ref<any>()
-const separatorConfig = ref({
-  separator: ' ', // 默认空格分隔
-  skipRows: 0 // 跳过的行数
-})
 
 // 加载状态
 const loadingEnvelope = ref(false)
@@ -457,7 +397,6 @@ const loadingComparison = ref(false)
 // 图表相关
 const chartInstance = ref<echarts.ECharts>()
 const chartType = ref('line')
-const showHistoricalData = ref(false)
 
 // 获取试验类型信息
 const fetchExperimentType = async () => {
@@ -534,48 +473,39 @@ const loadHistoricalEnvelope = async () => {
 // 文件格式检测
 const detectFileFormat = async (file: File) => {
   return new Promise<{
-    isSpecialFormat: boolean,
-    previewLines: string[],
-    suggestedSeparator: string
+    isSpecialFormat: boolean
   }>((resolve) => {
     const reader = new FileReader()
     reader.onload = (e) => {
       const text = e.target?.result as string
-      const lines = text.split('\n').slice(0, 5) // 读取前5行
+      if (!text) {
+        resolve({ isSpecialFormat: false })
+        return
+      }
+      
+      const lines = text.split('\n').slice(0, 3) // 读取前3行就足够了
       
       // 检测是否为特殊格式
       let isSpecialFormat = false
-      let suggestedSeparator = ' '
       
       if (lines.length > 0) {
         // 解析第一行（标题行）
-        const firstLine = lines[0].trim()
+        const firstLine = lines[0]?.trim()
         
         // 检查是否只有一列但包含多个空格分隔的值
-        if (firstLine.includes(' ') && !firstLine.includes(',') && !firstLine.includes('\t')) {
+        if (firstLine && firstLine.includes(' ') && !firstLine.includes(',') && !firstLine.includes('\t')) {
           // 可能是特殊格式，验证数据行
           if (lines.length > 1) {
-            const dataLine = lines[1].trim()
-            if (dataLine.includes(' ') && !dataLine.includes(',')) {
+            const dataLine = lines[1]?.trim()
+            if (dataLine && dataLine.includes(' ') && !dataLine.includes(',')) {
               isSpecialFormat = true
-              
-              // 检测分隔符类型
-              if (dataLine.includes('\t')) {
-                suggestedSeparator = '\t'
-              } else if (dataLine.match(/\s{2,}/)) {
-                suggestedSeparator = '  ' // 多空格
-              } else {
-                suggestedSeparator = ' ' // 单空格
-              }
             }
           }
         }
       }
       
       resolve({
-        isSpecialFormat,
-        previewLines: lines,
-        suggestedSeparator
+        isSpecialFormat
       })
     }
     reader.readAsText(file.slice(0, 1024)) // 只读取前1KB
@@ -587,25 +517,22 @@ const handleFileChange = async (uploadFile: any) => {
   comparisonFile.value = uploadFile.raw
   
   if (uploadFile.raw) {
-    // 检测文件格式
+    // 检测文件格式并自动处理
     try {
       const detection = await detectFileFormat(uploadFile.raw)
       if (detection.isSpecialFormat) {
         fileFormatType.value = 'special'
-        showFormatDetection.value = true
-        formatDetectionResult.value = detection
-        separatorConfig.value.separator = detection.suggestedSeparator
-        
-        ElMessage.info('检测到特殊格式文件，请确认分隔符设置')
+        ElMessage.info('检测到特殊格式文件，将自动按特殊格式处理')
+        // 自动上传特殊格式文件
+        await uploadSpecialFormatFile(uploadFile.raw)
       } else {
         fileFormatType.value = 'standard'
-        showFormatDetection.value = false
+        ElMessage.success('检测到标准格式文件')
       }
     } catch (error) {
       console.error('文件格式检测失败:', error)
       ElMessage.warning('文件格式检测失败，将按标准格式处理')
       fileFormatType.value = 'standard'
-      showFormatDetection.value = false
     }
   }
 }
@@ -614,14 +541,13 @@ const removeComparisonFile = () => {
   comparisonFile.value = undefined
   tempComparisonData.value = undefined
   comparisonResult.value = undefined
-  showFormatDetection.value = false // 重置格式检测状态
   updateChart()
 }
 
-// 确认格式并上传特殊格式文件
-const confirmFormatAndUpload = async () => {
-  if (!comparisonFile.value || !experimentType.value) {
-    ElMessage.warning('请先选择文件')
+// 自动上传特殊格式文件
+const uploadSpecialFormatFile = async (file: File) => {
+  if (!experimentType.value) {
+    ElMessage.warning('试验类型信息缺失')
     return
   }
   
@@ -630,17 +556,16 @@ const confirmFormatAndUpload = async () => {
     // 构建带有格式参数的请求
     const result = await envelopeApi.uploadTempComparisonData(
       experimentType.value.id, 
-      comparisonFile.value,
+      file,
       {
         format_type: 'special',
-        separator: separatorConfig.value.separator,
-        skip_rows: separatorConfig.value.skipRows
+        separator: ' ',  // 默认使用空格分隔
+        skip_rows: 0     // 默认不跳过行
       }
     )
     
     if (result.success) {
       tempComparisonData.value = result.data
-      showFormatDetection.value = false // 隐藏格式选择界面
       ElMessage.success(`特殊格式数据上传成功，共 ${result.data.row_count} 条记录`)
     } else {
       ElMessage.error(result.message || '上传失败')
@@ -652,6 +577,8 @@ const confirmFormatAndUpload = async () => {
     loadingComparison.value = false
   }
 }
+
+// 确认格式并上传特殊格式文件 - 已删除，改为自动处理
 
 // 上传临时对比数据到ClickHouse
 const loadComparisonData = async () => {
@@ -844,7 +771,8 @@ const generateSeriesData = () => {
   const series: any[] = []
   
   if (!envelopeData.value) return series
-    selectedColumns.value.forEach((column, index) => {
+  
+  selectedColumns.value.forEach((column, index) => {
     // 历史包络数据颜色（较淡的颜色用于包络）
     const envelopeColors = ['#a0cfff', '#95d475', '#f0c674', '#f79c9c', '#c8c9cc']
     // 实际数据颜色（鲜艳颜色用于新数据）
@@ -854,8 +782,8 @@ const generateSeriesData = () => {
     const actualColor = actualDataColors[index % actualDataColors.length]
     
     // 历史包络数据
-    const envelopeColumn = envelopeData.value.envelope_data[column]
-    if (envelopeColumn) {
+    const envelopeColumn = envelopeData.value?.envelope_data[column]
+    if (envelopeColumn && envelopeData.value?.time_points) {
       // 上包络线 - 使用虚线
       const upperData = envelopeData.value.time_points.map((time, i) => [time, envelopeColumn.upper[i]])
       series.push({
@@ -884,12 +812,11 @@ const generateSeriesData = () => {
         symbol: 'none'
       })
     }
-    
-    // 新数据对比线 - 使用实线，鲜艳颜色
-    if (comparisonResult.value && comparisonResult.value.comparison_data.data[column]) {
+      // 新数据对比线 - 使用实线，鲜艳颜色
+    if (comparisonResult.value?.comparison_data?.data[column] && comparisonResult.value?.comparison_data?.time_points) {
       const newData = comparisonResult.value.comparison_data.time_points.map((time, i) => [
         time,
-        comparisonResult.value!.comparison_data.data[column][i]
+        comparisonResult.value?.comparison_data?.data[column]?.[i]
       ])
       
       series.push({
@@ -939,6 +866,117 @@ const exportChart = () => {
   link.click()
   
   ElMessage.success('图表导出成功')
+}
+
+// 导出Excel数据
+const exportExcel = () => {
+  if (!envelopeData.value || selectedColumns.value.length === 0) {
+    ElMessage.warning('没有可导出的数据')
+    return
+  }
+  
+  try {
+    // 创建新的工作簿
+    const wb = XLSX.utils.book_new()
+    
+    // 准备包络数据表格
+    const envelopeSheetData: any[] = []
+    
+    // 表头
+    const headers = [experimentType.value?.time_column || 'Time']
+    selectedColumns.value.forEach(column => {
+      headers.push(`${column}_上包络`)
+      headers.push(`${column}_下包络`)
+    })
+    
+    // 如果有对比数据，添加对比列
+    if (comparisonResult.value) {
+      selectedColumns.value.forEach(column => {
+        headers.push(`${column}_新数据`)
+      })
+    }
+    
+    envelopeSheetData.push(headers)
+    
+    // 数据行
+    const maxLength = envelopeData.value.time_points?.length || 0
+    const comparisonLength = comparisonResult.value?.comparison_data?.time_points?.length || 0
+    const totalLength = Math.max(maxLength, comparisonLength)
+    
+    for (let i = 0; i < totalLength; i++) {
+      const row: any[] = []
+      
+      // 时间列 - 优先使用包络数据的时间点
+      if (i < maxLength && envelopeData.value.time_points) {
+        row.push(envelopeData.value.time_points[i])
+      } else if (i < comparisonLength && comparisonResult.value?.comparison_data?.time_points) {
+        row.push(comparisonResult.value.comparison_data.time_points[i])
+      } else {
+        row.push('')
+      }
+      
+      // 包络数据列
+      selectedColumns.value.forEach(column => {
+        const envelopeColumn = envelopeData.value?.envelope_data[column]
+        if (envelopeColumn && i < maxLength) {
+          row.push(envelopeColumn.upper[i] || '')
+          row.push(envelopeColumn.lower[i] || '')
+        } else {
+          row.push('')
+          row.push('')
+        }
+      })
+      
+      // 对比数据列
+      if (comparisonResult.value) {
+        selectedColumns.value.forEach(column => {
+          const comparisonData = comparisonResult.value?.comparison_data?.data[column]
+          if (comparisonData && i < comparisonLength) {
+            row.push(comparisonData[i] || '')
+          } else {
+            row.push('')
+          }
+        })
+      }
+      
+      envelopeSheetData.push(row)
+    }
+    
+    // 创建包络数据工作表
+    const envelopeSheet = XLSX.utils.aoa_to_sheet(envelopeSheetData)
+    XLSX.utils.book_append_sheet(wb, envelopeSheet, '包络分析数据')
+    
+    // 如果有统计信息，创建统计信息工作表
+    const statsData: any[] = [
+      ['统计项', '数值'],
+      ['历史数据集数量', envelopeData.value.data_count || 0],
+      ['包络数据点数', (envelopeData.value as any).sampling_points || 0],
+      ['原始数据点数', (envelopeData.value as any).original_points || 0],
+      ['处理模式', (envelopeData.value as any).sampling_method === 'full_data' ? '完整数据' : '采样处理'],
+      ['选择的数据列', selectedColumns.value.join(', ')]
+    ]
+    
+    if (comparisonResult.value) {
+      statsData.push(
+        ['对比数据点数', (comparisonResult.value as any).comparison_sampling_points || 0],
+        ['对比原始数据点数', (comparisonResult.value as any).comparison_original_points || 0]
+      )
+    }
+    
+    const statsSheet = XLSX.utils.aoa_to_sheet(statsData)
+    XLSX.utils.book_append_sheet(wb, statsSheet, '统计信息')
+    
+    // 生成文件名
+    const fileName = `包络分析数据_${experimentType.value?.name || 'unknown'}_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.xlsx`
+    
+    // 导出文件
+    XLSX.writeFile(wb, fileName)
+    
+    ElMessage.success('Excel数据导出成功')
+  } catch (error) {
+    console.error('导出Excel失败:', error)
+    ElMessage.error('导出Excel失败')
+  }
 }
 
 // 窗口大小变化处理

@@ -1,18 +1,14 @@
 import pandas as pd
 import numpy as np
-import os
 import logging
 import io
-import re
 from datetime import datetime, timedelta
-from werkzeug.utils import secure_filename
-from database import db, execute_raw_sql, get_experiment_data_table_name
+from database import db
 from models.models import (
     ExperimentData,
     ExperimentType,
     EnvelopeSettings,
     EnvelopeCache,
-    ExperimentType,
 )
 from services.clickhouse_manager import get_clickhouse_manager
 import hashlib
@@ -109,9 +105,7 @@ class DataProcessor:
                 processed_lines.append(processed_line)
 
         # 创建标准CSV格式内容
-        csv_content = "\n".join(processed_lines)
-
-        # 使用pandas读取
+        csv_content = "\n".join(processed_lines)  # 使用pandas读取
         df = pd.read_csv(io.StringIO(csv_content))
         return df
 
@@ -119,11 +113,11 @@ class DataProcessor:
         """
         解析特殊格式的完整数据（用于上传）
         """
-        import io
-
         lines = content.strip().split("\n")
         if len(lines) < 2:
-            raise ValueError("文件内容不足")  # 处理所有行，不限制行数
+            raise ValueError("文件内容不足")
+
+        # 处理所有行，不限制行数
         processed_lines = []
         for line in lines:
             if line.strip():
@@ -137,13 +131,22 @@ class DataProcessor:
         # 使用pandas读取
         df = pd.read_csv(io.StringIO(csv_content))
 
-        # 强制转换数值列的数据类型
+        # 强制转换数值列的数据类型 - 改进版本
         for col in df.columns:
-            if col != df.columns[0]:  # 假设第一列是时间列，其他都是数值列
-                try:
-                    df[col] = pd.to_numeric(df[col], errors="coerce")
-                except:
-                    pass
+            # 尝试将所有列都转换为数值类型
+            try:
+                # 使用 pd.to_numeric 转换，errors='coerce' 会将无法转换的值设为 NaN
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+                logging.info(f"列 '{col}' 转换为数值类型成功")
+            except Exception as e:
+                logging.warning(f"列 '{col}' 转换为数值类型失败: {e}")
+                # 如果转换失败，保持原始数据类型
+
+        # 删除包含 NaN 的行（由数据转换失败产生）
+        original_count = len(df)
+        df = df.dropna()
+        if len(df) < original_count:
+            logging.info(f"删除了 {original_count - len(df)} 行包含无效数据的记录")
 
         return df
 
@@ -1413,23 +1416,41 @@ class DataProcessor:
                 processed_lines.append(processed_line)
 
             # 创建标准CSV格式的内容
-            csv_content = "\n".join(processed_lines)
-
-            # 读取为DataFrame
+            csv_content = "\n".join(processed_lines)  # 读取为DataFrame
             df = pd.read_csv(io.StringIO(csv_content), sep="\t")
         else:
-            # 单个字符分隔符
+            # 单个字符分隔符 - 改进处理方法
             processed_lines = []
             for line in lines:
-                # 将分隔符替换为逗号
-                processed_line = line.strip().replace(separator, ",")
-                processed_lines.append(processed_line)
+                if line.strip():  # 跳过空行
+                    # 使用split方法按分隔符分割，然后用逗号连接
+                    # 这样能正确处理多个连续分隔符的情况
+                    parts = line.strip().split(separator)
+                    # 过滤掉空字符串（由连续分隔符产生）
+                    parts = [part for part in parts if part.strip()]
+                    processed_line = ",".join(parts)
+                    processed_lines.append(processed_line)
 
             # 创建标准CSV格式的内容
-            csv_content = "\n".join(processed_lines)
-
-            # 读取为DataFrame
+            csv_content = "\n".join(processed_lines)  # 读取为DataFrame
             df = pd.read_csv(io.StringIO(csv_content))
+
+        # 强制转换数值列的数据类型 - 和parse_special_format_complete保持一致
+        for col in df.columns:
+            # 尝试将所有列都转换为数值类型
+            try:
+                # 使用 pd.to_numeric 转换，errors='coerce' 会将无法转换的值设为 NaN
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+                logging.info(f"列 '{col}' 转换为数值类型成功")
+            except Exception as e:
+                logging.warning(f"列 '{col}' 转换为数值类型失败: {e}")
+                # 如果转换失败，保持原始数据类型
+
+        # 删除包含 NaN 的行（由数据转换失败产生）
+        original_count = len(df)
+        df = df.dropna()
+        if len(df) < original_count:
+            logging.info(f"删除了 {original_count - len(df)} 行包含无效数据的记录")
 
         logging.info(f"特殊格式文件转换成功，数据形状: {df.shape}")
         logging.info(f"转换后的列名: {df.columns.tolist()}")
