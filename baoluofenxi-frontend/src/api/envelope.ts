@@ -27,11 +27,26 @@ export const envelopeApi = {
   }): Promise<any> {
     return api.post(`/api/envelope/${experimentTypeId}/envelope`, params).then(res => res.data.data)
   },
-
   // 上传临时对比数据到ClickHouse
-  uploadTempComparisonData(experimentTypeId: number, file: File): Promise<any> {
+  uploadTempComparisonData(experimentTypeId: number, file: File, formatOptions?: {
+    format_type?: 'standard' | 'special'
+    separator?: string
+    skip_rows?: number
+  }): Promise<any> {
     const formData = new FormData()
     formData.append('file', file)
+
+    // 添加格式参数
+    if (formatOptions) {
+      formData.append('format_type', formatOptions.format_type || 'standard')
+      if (formatOptions.separator) {
+        formData.append('separator', formatOptions.separator)
+      }
+      if (formatOptions.skip_rows !== undefined) {
+        formData.append('skip_rows', formatOptions.skip_rows.toString())
+      }
+    }
+
     return api.post(`/api/envelope/${experimentTypeId}/temp-upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'

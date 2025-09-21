@@ -135,8 +135,7 @@
               type="info" 
               show-icon 
               style="margin-bottom: 15px;"
-            />
-            <el-upload
+            />            <el-upload
               ref="uploadRef"
               :auto-upload="false"
               :on-change="handleFileChange"
@@ -150,7 +149,68 @@
               </div>
             </el-upload>
             
-            <div v-if="comparisonFile" style="margin-top: 15px;">
+            <!-- 文件格式检测结果 -->
+            <div v-if="showFormatDetection && formatDetectionResult" style="margin-top: 15px;">
+              <el-card shadow="never" style="border: 1px dashed #f56c6c;">
+                <template #header>
+                  <span style="color: #f56c6c; font-size: 14px;">
+                    <el-icon><Warning /></el-icon>
+                    检测到特殊格式文件
+                  </span>
+                </template>
+                <div>
+                  <el-alert
+                    title="文件格式说明"
+                    type="warning"
+                    :closable="false"
+                    style="margin-bottom: 15px;"
+                  >
+                    <template #default>
+                      <p>系统检测到您的CSV文件所有数据都在一列中，需要进行格式转换</p>
+                      <p><strong>检测到的数据格式：</strong></p>
+                      <div style="font-family: monospace; background: #f5f5f5; padding: 8px; margin: 8px 0; border-radius: 4px;">
+                        <div v-for="(line, index) in formatDetectionResult.previewLines" :key="index">
+                          {{ line }}
+                        </div>
+                      </div>
+                    </template>
+                  </el-alert>
+                  
+                  <el-form label-width="120px" size="small">
+                    <el-form-item label="分隔符类型:">
+                      <el-radio-group v-model="separatorConfig.separator">
+                        <el-radio value=" ">单空格</el-radio>
+                        <el-radio value="  ">多空格</el-radio>
+                        <el-radio value="\t">制表符</el-radio>
+                      </el-radio-group>
+                    </el-form-item>
+                    <el-form-item label="跳过行数:">
+                      <el-input-number 
+                        v-model="separatorConfig.skipRows" 
+                        :min="0" 
+                        :max="5" 
+                        size="small"
+                        style="width: 120px"
+                      />
+                      <el-text type="info" size="small" style="margin-left: 10px;">
+                        从文件开头跳过的行数
+                      </el-text>
+                    </el-form-item>
+                  </el-form>
+                  
+                  <div style="margin-top: 10px;">
+                    <el-button type="primary" size="small" @click="confirmFormatAndUpload">
+                      确认格式并上传
+                    </el-button>
+                    <el-button size="small" @click="showFormatDetection = false">
+                      取消（按标准格式处理）
+                    </el-button>
+                  </div>
+                </div>
+              </el-card>
+            </div>
+              
+            <div v-if="comparisonFile && !showFormatDetection" style="margin-top: 15px;">
               <el-tag size="large" closable @close="removeComparisonFile">
                 <el-icon><Document /></el-icon>
                 {{ comparisonFile.name }}
@@ -349,7 +409,8 @@ import {
   TrendCharts, 
   Download, 
   UploadFilled, 
-  Document
+  Document,
+  Warning
 } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { envelopeApi } from '../api/envelope'
@@ -379,6 +440,15 @@ const samplingPoints = ref(200)
 // 对比数据采样配置
 const comparisonUseSampling = ref(true)
 const comparisonSamplingPoints = ref(200)
+
+// 特殊格式处理相关状态
+const fileFormatType = ref<'standard' | 'special'>('standard')
+const showFormatDetection = ref(false)
+const formatDetectionResult = ref<any>()
+const separatorConfig = ref({
+  separator: ' ', // 默认空格分隔
+  skipRows: 0 // 跳过的行数
+})
 
 // 加载状态
 const loadingEnvelope = ref(false)
@@ -461,16 +531,126 @@ const loadHistoricalEnvelope = async () => {
   }
 }
 
+// 文件格式检测
+const detectFileFormat = async (file: File) => {
+  return new Promise<{
+    isSpecialFormat: boolean,
+    previewLines: string[],
+    suggestedSeparator: string
+  }>((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = e.target?.result as string
+      const lines = text.split('\n').slice(0, 5) // 读取前5行
+      
+      // 检测是否为特殊格式
+      let isSpecialFormat = false
+      let suggestedSeparator = ' '
+      
+      if (lines.length > 0) {
+        // 解析第一行（标题行）
+        const firstLine = lines[0].trim()
+        
+        // 检查是否只有一列但包含多个空格分隔的值
+        if (firstLine.includes(' ') && !firstLine.includes(',') && !firstLine.includes('\t')) {
+          // 可能是特殊格式，验证数据行
+          if (lines.length > 1) {
+            const dataLine = lines[1].trim()
+            if (dataLine.includes(' ') && !dataLine.includes(',')) {
+              isSpecialFormat = true
+              
+              // 检测分隔符类型
+              if (dataLine.includes('\t')) {
+                suggestedSeparator = '\t'
+              } else if (dataLine.match(/\s{2,}/)) {
+                suggestedSeparator = '  ' // 多空格
+              } else {
+                suggestedSeparator = ' ' // 单空格
+              }
+            }
+          }
+        }
+      }
+      
+      resolve({
+        isSpecialFormat,
+        previewLines: lines,
+        suggestedSeparator
+      })
+    }
+    reader.readAsText(file.slice(0, 1024)) // 只读取前1KB
+  })
+}
+
 // 处理文件选择
-const handleFileChange = (uploadFile: any) => {
+const handleFileChange = async (uploadFile: any) => {
   comparisonFile.value = uploadFile.raw
+  
+  if (uploadFile.raw) {
+    // 检测文件格式
+    try {
+      const detection = await detectFileFormat(uploadFile.raw)
+      if (detection.isSpecialFormat) {
+        fileFormatType.value = 'special'
+        showFormatDetection.value = true
+        formatDetectionResult.value = detection
+        separatorConfig.value.separator = detection.suggestedSeparator
+        
+        ElMessage.info('检测到特殊格式文件，请确认分隔符设置')
+      } else {
+        fileFormatType.value = 'standard'
+        showFormatDetection.value = false
+      }
+    } catch (error) {
+      console.error('文件格式检测失败:', error)
+      ElMessage.warning('文件格式检测失败，将按标准格式处理')
+      fileFormatType.value = 'standard'
+      showFormatDetection.value = false
+    }
+  }
 }
 
 const removeComparisonFile = () => {
   comparisonFile.value = undefined
   tempComparisonData.value = undefined
   comparisonResult.value = undefined
+  showFormatDetection.value = false // 重置格式检测状态
   updateChart()
+}
+
+// 确认格式并上传特殊格式文件
+const confirmFormatAndUpload = async () => {
+  if (!comparisonFile.value || !experimentType.value) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+  
+  loadingComparison.value = true
+  try {
+    // 构建带有格式参数的请求
+    const result = await envelopeApi.uploadTempComparisonData(
+      experimentType.value.id, 
+      comparisonFile.value,
+      {
+        format_type: 'special',
+        separator: separatorConfig.value.separator,
+        skip_rows: separatorConfig.value.skipRows
+      }
+    )
+    
+    if (result.success) {
+      tempComparisonData.value = result.data
+      showFormatDetection.value = false // 隐藏格式选择界面
+      ElMessage.success(`特殊格式数据上传成功，共 ${result.data.row_count} 条记录`)
+    } else {
+      ElMessage.error(result.message || '上传失败')
+    }
+  } catch (error) {
+    console.error('上传特殊格式数据失败:', error)
+    ElMessage.error('上传特殊格式数据失败')
+  } finally {
+    loadingComparison.value = false
+  }
 }
 
 // 上传临时对比数据到ClickHouse
