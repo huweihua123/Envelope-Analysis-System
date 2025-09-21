@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import os
 import logging
@@ -16,9 +16,16 @@ logging.basicConfig(
 
 def create_app(config_name=None):
     """应用工厂函数"""
-    app = Flask(__name__)
+    # 设置前端静态文件路径
+    frontend_dist_path = os.path.join(
+        os.path.dirname(__file__), 'web'
+    )
+    
+    app = Flask(__name__,
+                static_folder=frontend_dist_path,
+                static_url_path='')
 
-    # 启用CORS支持前后端分离
+    # 启用CORS支持前后端分离（保留用于开发环境）
     CORS(
         app,
         resources={
@@ -39,6 +46,9 @@ def create_app(config_name=None):
 
     # 注册API路由
     register_api_routes(app)
+    
+    # 注册前端路由
+    register_frontend_routes(app)
 
     return app
 
@@ -673,6 +683,39 @@ def register_api_routes(app):
     def internal_error(error):
         db.session.rollback()
         return jsonify({"success": False, "message": "Internal server error"}), 500
+
+
+def register_frontend_routes(app):
+    """注册前端路由"""
+    
+    @app.route('/')
+    def index():
+        """前端首页"""
+        try:
+            return send_from_directory(app.static_folder, 'index.html')
+        except Exception:            return jsonify({"error": "Frontend not built yet"}), 404
+
+    @app.route('/<path:path>')
+    def catch_all(path):
+        """处理所有前端路由"""
+        # 检查是否是静态资源文件
+        static_extensions = ['js', 'css', 'png', 'jpg', 'jpeg', 'gif', 'ico',
+                           'svg', 'woff', 'woff2', 'ttf', 'eot']
+
+        if '.' in path and path.split('.')[-1] in static_extensions:
+            try:
+                return send_from_directory(app.static_folder, path)
+            except Exception:
+                return jsonify({"error": "File not found"}), 404
+        else:
+            # 前端路由，返回 index.html
+            try:
+                return send_from_directory(app.static_folder, 'index.html')
+            except Exception:
+                return (
+                    jsonify({"error": "Frontend not built yet"}),
+                    404
+                )
 
 
 # 创建应用实例

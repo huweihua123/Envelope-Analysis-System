@@ -47,9 +47,8 @@
         </el-form-item>
         
         <el-form-item label="数据列" prop="data_columns">
-          <div class="data-columns-input">
-            <el-input
-              v-for="(column, index) in form.data_columns"
+          <div class="data-columns-input">            <el-input
+              v-for="(_column, index) in form.data_columns"
               :key="index"
               v-model="form.data_columns[index]"
               placeholder="请输入数据列名称"
@@ -118,7 +117,7 @@ const rules = {
   ],
   data_columns: [
     { 
-      validator: (rule: any, value: string[], callback: (error?: Error) => void) => {
+      validator: (_rule: any, value: string[], callback: (error?: Error) => void) => {
         if (!value || value.length === 0) {
           callback(new Error('请至少添加一个数据列'))
         } else if (value.some(col => !col.trim())) {

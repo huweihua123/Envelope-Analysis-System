@@ -334,12 +334,11 @@
             <el-table-column prop="default_type" label="默认类型" width="120" />
             <el-table-column prop="default_expression" label="默认表达式" />
           </el-table>
-          
-          <!-- 样本数据 -->
-          <div v-if="selectedData.clickhouse_info.sample_data && selectedData.clickhouse_info.sample_data.length > 0" style="margin-top: 20px;">
+            <!-- 样本数据 -->
+          <div v-if="(selectedData.clickhouse_info as any).sample_data && (selectedData.clickhouse_info as any).sample_data.length > 0" style="margin-top: 20px;">
             <h5 style="margin-bottom: 10px;">样本数据（前10行）</h5>
             <el-table 
-              :data="selectedData.clickhouse_info.sample_data" 
+              :data="(selectedData.clickhouse_info as any).sample_data"
               size="small" 
               border 
               height="300"

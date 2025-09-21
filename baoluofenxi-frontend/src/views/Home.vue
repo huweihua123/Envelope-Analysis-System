@@ -109,7 +109,7 @@ const goToUpload = () => {
   if (experimentTypes.value.length > 0) {
     // 如果只有一个试验类型，直接跳转
     if (experimentTypes.value.length === 1) {
-      router.push(`/upload/${experimentTypes.value[0].id}`)
+      router.push(`/upload/${experimentTypes.value[0]?.id}`)
     } else {
       // 多个类型时跳转到类型列表
       router.push('/experiment-types')
@@ -120,7 +120,7 @@ const goToUpload = () => {
 const goToAnalysis = () => {
   if (experimentTypes.value.length > 0) {
     if (experimentTypes.value.length === 1) {
-      router.push(`/envelope/${experimentTypes.value[0].id}`)
+      router.push(`/envelope/${experimentTypes.value[0]?.id}`)
     } else {
       router.push('/experiment-types')
     }
